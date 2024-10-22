@@ -25,30 +25,26 @@ This project is a simple API server built with FastAPI for a multiplayer Snake g
 
 1. Run the server:
    ```
-   uvicorn main:app --reload
+   fastapi dev
    ```
 
-2. Connect to the WebSocket endpoint at `ws://localhost:8000/ws/{player_id}` to join the game.
+And then open the url provided by the CLI
 
 ## API Endpoints
 
-- `WebSocket /ws/{player_id}`: WebSocket connection for real-time game updates
-- `GET /game_state`: Get the current game state
-- `POST /move`: Submit a move for a player
+The interactive documentation is available at :
+/docs
+
+The beautiful documentation is available at :
+/redoc
 
 ## Project Structure
 
-- `main.py`: Contains the FastAPI application, WebSocket handling, and game logic
+- `main.py`: Contains the FastAPI application
 
 ## Game Rules
 
-- Players control snakes that move around the game board
-- Snakes grow by eating food
-- The game ends when a snake collides with another snake or the game boundaries
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+TODO
 
 ## License
 
