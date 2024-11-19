@@ -1,69 +1,98 @@
-
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends
-from sqlmodel import Field, Session, SQLModel, create_engine, select
-from typing import List, Optional
 from typing_extensions import Annotated
+from pydantic import BaseModel, Field
+from sqlmodel import Session
 
-# Define the SQLModel
-class Item(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    description: str
+from model import Game, Player, create_new_snake, create_db_and_tables, get_game, get_player, get_session, Direction, move_all_game
 
-# Create the database engine
-DATABASE_URL = "sqlite:///database.db"
-engine = create_engine(DATABASE_URL)
-
-# Create tables
-SQLModel.metadata.create_all(engine)
+create_db_and_tables()
 
 app = FastAPI()
 
-# Dependency to get DB session
-def get_session():
-    with Session(engine) as session:
-        yield session
+class GameSchema(BaseModel):
+    name: Annotated[str, Field(example="Game Name")]
+    slug: Annotated[str, Field(example="game-slug")]
 
-@app.post("/items/", response_model=Item)
-def create_item(item: Item, session: Annotated[Session, Depends(get_session)]):
-    session.add(item)
-    session.commit()
-    session.refresh(item)
-    return item
+    class Config:
+        from_attributes = True
 
-@app.get("/items/", response_model=List[Item])
-def read_items(session: Annotated[Session, Depends(get_session)]):
-    items = session.exec(select(Item)).all()
-    return items
+class SnakePositionSchema(BaseModel):
+    x: Annotated[int, Field(description="The x coordinate of the snake position")]
+    y: Annotated[int, Field(description="The y coordinate of the snake position")]
+    created_at: Annotated[datetime, Field(description="The created at date of the snake position")]
 
-@app.get("/items/{item_id}", response_model=Item)
-def read_item(item_id: int, session: Annotated[Session, Depends(get_session)]):
-    item = session.get(Item, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
+class CreatePlayerSchema(BaseModel):
+    direction: Annotated[Direction, Field(example="UP", description="The direction the player is facing", default=Direction.UP)]
+    name: Annotated[str, Field(example="Player Name")]
+    color: Annotated[str, Field(example="#000000")]
 
-@app.put("/items/{item_id}", response_model=Item)
-def update_item(item_id: int, item_update: Item, session: Annotated[Session, Depends(get_session)]):
-    db_item = session.get(Item, item_id)
-    if db_item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
+    class Config:
+        from_attributes = True
+
+class PlayerSchema(CreatePlayerSchema):
+    id: Annotated[int, Field(description="The ID of the player")]
+
+class PlayerWithSnakeSchema(PlayerSchema):
+    positions: list[SnakePositionSchema] = []
+
+class GameWithPlayersSchema(GameSchema):
+    players: list[PlayerWithSnakeSchema] = []
+
+
+@app.post("/game", response_model=GameSchema)
+def create_game(game: GameSchema, session: Annotated[Session, Depends(get_session)]):
+    if get_game(game.slug, session) is not None:
+        raise HTTPException(status_code=400, detail="Game already exists for this slug")
     
-    item_data = item_update.dict(exclude_unset=True)
-    for key, value in item_data.items():
-        setattr(db_item, key, value)
-    
-    session.add(db_item)
+    new_game = Game.model_validate(game)
+    session.add(new_game)
     session.commit()
-    session.refresh(db_item)
-    return db_item
+    session.refresh(new_game)
+    return new_game
 
-@app.delete("/items/{item_id}", response_model=dict)
-def delete_item(item_id: int, session: Annotated[Session, Depends(get_session)]):
-    item = session.get(Item, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
+@app.post("/game/{slug}/register", response_model=GameWithPlayersSchema)
+def register_player(slug: str, player: CreatePlayerSchema, session: Annotated[Session, Depends(get_session)]):
+    game = get_game(slug, session)
+
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
     
-    session.delete(item)
+    player_data = player.model_dump()
+    player_data["game_id"] = game.id
+    new_player = Player.model_validate(player_data)
+    session.add(new_player)
+
+    create_new_snake(new_player, session)
+
     session.commit()
-    return {"message": "Item deleted successfully"}
+    session.refresh(new_player)
+    return new_player.game
+
+@app.get("/game/{slug}", response_model=GameWithPlayersSchema)
+def show_game(slug: str, session: Annotated[Session, Depends(get_session)]):
+    game = get_game(slug, session)
+
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    return game
+
+@app.patch("/player/{id}", response_model=PlayerSchema)
+def update_player(id: int, direction: Direction, session: Annotated[Session, Depends(get_session)]):
+    player = get_player(id, session)
+
+    if player is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
+    player.direction = direction
+    session.add(player)
+    session.commit()
+    session.refresh(player)
+    return player
+
+@app.post("/tick")
+def tick(session: Annotated[Session, Depends(get_session)]):
+    move_all_game(session)
+    session.commit()
+    return { "status": "done" }
