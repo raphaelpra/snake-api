@@ -48,14 +48,16 @@ sqlite_url = f"sqlite:///{sqlite_file_name}"
 connect_args = {"check_same_thread": False}
 engine = create_engine(sqlite_url, connect_args=connect_args)
 
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
-# Dependency to get DB session
 def get_session():
     db = Session(bind=engine)
-    with db as session:
-        yield session
+    try:
+        yield db
+    finally:
+        db.close()
 
 def get_game(slug: str, session: Session) -> Game | None:
     return session.exec(select(Game).where(Game.slug == slug)).one_or_none()

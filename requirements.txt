@@ -1,3 +1,5 @@
 fastapi[standard]
 sqlmodel
 pydantic
+fastapi-restful
+typing-inspect

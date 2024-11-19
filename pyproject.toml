@@ -1,7 +1,0 @@
-[project]
-name = "snake-api"
-version = "0.1.0"
-description = "A basic API server for a Snake game"
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = []

@@ -3,8 +3,10 @@ from fastapi import FastAPI, HTTPException, Depends
 from typing_extensions import Annotated
 from pydantic import BaseModel, Field
 from sqlmodel import Session
+from fastapi_utils.tasks import repeat_every
+import uvicorn
 
-from model import Game, Player, create_new_snake, create_db_and_tables, get_game, get_player, get_session, Direction, move_all_game
+from model import Game, Player, create_new_snake, create_db_and_tables, get_game, get_player, get_session, Direction, move_all_game, engine
 
 create_db_and_tables()
 
@@ -91,8 +93,13 @@ def update_player(id: int, direction: Direction, session: Annotated[Session, Dep
     session.refresh(player)
     return player
 
-@app.post("/tick")
-def tick(session: Annotated[Session, Depends(get_session)]):
-    move_all_game(session)
-    session.commit()
-    return { "status": "done" }
+@app.on_event("startup")
+@repeat_every(seconds=5, raise_exceptions=True)
+def tick() -> None:
+    print("tick")
+    with Session(bind=engine) as session:
+        move_all_game(session)
+        session.commit()
+
+if __name__ == '__main__':
+    uvicorn.run(app)
