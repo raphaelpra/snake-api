@@ -3,3 +3,4 @@ sqlmodel
 pydantic
 fastapi-restful
 typing-inspect
+fastapi_utils
